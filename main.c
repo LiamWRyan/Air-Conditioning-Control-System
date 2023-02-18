@@ -4,261 +4,6 @@ struct SystemState ss; // globally defined struct, repersenting system state.
 struct Buffer   	b; // globally defined struct, a buffer of user input.
 
 
-void null_buffer(struct Buffer *b)
-{
-	for (int i = 0; i < BUFFER_SIZE; i++)
-	{
-    	b->buffer[i] = '\0';
-	}
-}
-
-
-int get_count(struct Buffer *b)
-{
-	return b->count;
-}
-
-
-int interpret_cmd(struct Buffer *b)
-{
-	if (b->buffer[0] == 'F')
-	{
-    	return -1;
-	}
-	else
-	{
-    	int first_digit_ascii  =  b->buffer[0];
-    	int second_digit_ascii =  b->buffer[1];
-
-
-    	int first_digit_adjusted_to_int  = first_digit_ascii-48;
-    	int second_digit_adjusted_to_int = second_digit_ascii-48;
-
-
-    	// convert first digit to 10s
-    	int temp = first_digit_adjusted_to_int*10;
-    	// add second digit to 1s
-    	int temperature_value = temp + second_digit_adjusted_to_int;
-
-
-    	return temperature_value;
-	}
-
-
-}
-
-
-int is_valid_cmd(struct Buffer *b)
-{
-
-	// 1 indicates a valid command
-
-	// check for "FF  ", enter sleep mode.
-	if (b->buffer[0] == 'F' && b->buffer[1] == 'F' && b->buffer[2] == ' ' && b->buffer[3] == ' ')
-	{
-    	return 1;
-	}
-
-	// RANGE OF ALLOWED VALUES: 20-30
-
-	// check that the 0th element equals 2 or 3
-	if (b->buffer[0]  == '2' || b->buffer[0] == '3')
-	{
-    	// if the 0th element was 2, the 1st element can be 0-9
-    	if (b->buffer[0] == '2')
-    	{
-        	// check the 1st element is between 0 and 9, and the 2nd and 3rd are spaces.
-        	if (b->buffer[1] <= '9' && b->buffer[1] >= '0' && b->buffer[2] == ' ' && b->buffer[3] == ' ')
-        	{
-            	return 1;
-        	}
-    	}
-    	else // the 0th element was a 3, the 1st element must be a 0.
-    	{
-        	// check the 1st element is 0, and the 2nd and 3rd are spaces.
-        	if (b->buffer[1] == '0' && b->buffer[2] == ' ' && b->buffer[3] == ' ')
-        	{
-            	return 1;
-        	}
-
-
-    	}
-	}
-
-	return 0;
-}
-
-int is_full(struct Buffer *b)
-{
-	return b->count == BUFFER_SIZE;
-}
-
-
-void insert(struct Buffer *b, char data) {
-
-
-	// Check null
-	if (b == NULL)
-	{
-    	return;
-	}
-	// if buffer is full, ignore input data.
-	if (is_full(b))
-	{
-    	//printf("Error: buffer is full\n");
-    	return;
-	}
-	b->buffer[b->index] = data;
-	// if rb -> in == buffer_size, then, buffer_size%buffer_size = 0, index is reset
-	// e.g., 3%10 = 3, 10%10 = 0.
-	b->index = (b->index + 1) % BUFFER_SIZE;
-
-
-	b->count++; //increment counter
-}
-
-
-
-/* Function: init_b()
- *
- * Parameters:
- *  	struct RingerBuffer *: the address of a ringbuffer.
- *
- * Purpose: given the address of a ring buffer struct, initialize its
- *      	attributes.
- *
- * Return: void
- */
-void init_b(struct Buffer *b)
-{
-	b->buffer[0] = '\0';            	// null buffer
-	b->buffer[1] = '\0';            	// 	^
-	b->buffer[2] = '\0';            	// 	^
-	b->buffer[3] = '\0';            	// 	^
-	b->index  = 0;                  	// init to 0
-	b->count  = 0;                  	// init to 0
-}
-
-
-// ==========================================================================
-
-int get_goal_temp(struct SystemState *ss)
-{
-	return ss->t_goal;
-}
-
-void set_goal_temp(struct SystemState *ss, int new_temp)
-{
-	ss->t_goal = new_temp;
-}
-
-void set_current_temp(struct SystemState *ss, int new_temp, int increase_temp)
-{
-	if (increase_temp) // will = 1 when heating is 1
-	{
-		ss->t_curr = ss->t_curr + new_temp;
-	}
-	else // assume if we arent increasing the temp, we are decreasing it.
-	{
-		ss->t_curr = ss->t_curr - new_temp;
-	}
-}
-
-int get_current_temp(struct SystemState *ss)
-{
-	return ss->t_curr;
-}
-
-int get_system_state(struct SystemState *ss)
-{
-	return ss->state;
-}
-
-void set_heating_to_off(struct SystemState *ss)
-{
-	ss->heating = 0;
-}
-
-void set_heating_to_on(struct SystemState *ss)
-{
-	ss->heating = 1;
-}
-
-void set_cooling_to_on(struct SystemState *ss)
-{
-	ss->cooling = 1;
-}
-
-void set_cooling_to_off(struct SystemState *ss)
-{
-	ss->cooling = 0;
-}
-
-int should_heat(struct SystemState *ss)
-{
-	return ss->heating;
-}
-
-int should_cool(struct SystemState *ss)
-{
-	return ss->heating;
-}
-
-void set_system_state_sleep(struct SystemState *ss)
-{
-	ss->state = 0; // set state to 0 for sleep mode.
-}
-
-void set_system_state_active(struct SystemState *ss)
-{
-	ss->state = 1; // set the state to 1 for active mode.
-}
-
-char* get_current_and_goal_temps(struct SystemState *ss)
-{
-
-	static char charArray[9];
-
-	// get the first and second digit of the current temperature
-    int first_digit_current_temp  = ss->t_curr / 10;
-    int second_digit_current_temp = ss->t_curr - (first_digit_current_temp*10);
-
-	// by adding 48 (ascii 0) to the digits and casting to a char,
-    // we will effectively convert to the character representation of the digit
-    char char_one_ct =  (char)(first_digit_current_temp + 48);
-    char char_two_ct =  (char)(first_digit_current_temp + 48);
-
-	// get the first and second digit of the goal temp temperature
-    int first_digit_goal_temp  = ss->t_goal / 10;
-    int second_digit_goal_temp = ss->t_goal - (first_digit_goal_temp*10);
-
-	char char_one_gt =  (char)(first_digit_goal_temp + 48);
-    char char_two_gt =  (char)(second_digit_goal_temp + 48);
-
-	charArray[0] = '(';
-	charArray[1] = char_one_ct;
-	charArray[2] = char_two_ct;
-	charArray[3] = ',';
-	charArray[4] = char_one_gt;
-	charArray[5] = char_two_gt;
-	charArray[6] = ')';
-	charArray[7] = '\r';
-	charArray[8] = '\n';
-
-	return charArray;
-
-}
-
-void init_ss(struct SystemState *ss)
-{
-	ss->state   	= 0;        	// Indicates sleep mode
-	ss->heating 	= 0;        	// off
-	ss->cooling 	= 0;        	// off
-	ss->t_curr  	= T_INITIAL;	// initial temp
-	ss->t_goal  	= T_INITIAL;	// goal temp
-}
-
-
 // ==========================================================================
 
 
@@ -268,25 +13,25 @@ void off_sub_period(int heating)
 	
 	if (heating)
 	{
-		set_current_temp(&ss, rand()%1, heating);
-
+		// might complain about implicit dec
+		update_current_temp(&ss, rand()%1, heating);
+		//GPIO_clearDio(COOLING_UNIT_ID); 			// in case it is on, turn it off
 		GPIO_clearDio(HEATING_UNIT_ID);
 
 	}
 	else // assume cooling if not heating
 	{
-		set_current_temp(&ss, rand()%1, heating); // heating will be zero if this case is reached
-
+		update_current_temp(&ss, rand()%1, heating);  // heating will be zero if this case is reached
+		//GPIO_clearDio(HEATING_UNIT_ID);			   // in case it is on, turn it off
 		GPIO_clearDio(COOLING_UNIT_ID);
-
 	}
 
-	// after one of the above cases has executed, the temperature value will have 
+	// After one of the above cases has executed, the temperature value will have 
 	// been updated, and we can now get the current temp and the goal temp.
 	char * temperature_copmarison = get_current_and_goal_temps(&ss);
 
-	// regardless of whether heating or cooling, at the end of the off period we want to send to the user
-	// a comparison of the temperatures.
+	// regardless of whether were are heating or cooling, during the off sub period we want to send to the user
+	// a comparison of the temperatures (Tcurrent,Tgoal).
 	for (int i = 0; i < 0; i++)
 	{
 		char ch = temperature_copmarison[i];
@@ -310,12 +55,14 @@ void on_sub_period(int heating)
 	if (heating)
 	{
 		UARTCharPut(UART0_BASE, (uint8_t) 'H');
-		GPIO_setDio(HEATING_UNIT_ID); // red LED
+		GPIO_setDio(HEATING_UNIT_ID); 	// red LED
+		GPIO_clearDio(COOLING_UNIT_ID); // ensure green LED it is not on
 	}
 	else // if you are not heating, you are cooling
 	{
 		UARTCharPut(UART0_BASE, (uint8_t) 'C');
-		GPIO_setDio(COOLING_UNIT_ID); // green LED
+		GPIO_setDio(COOLING_UNIT_ID); 	// green LED
+		GPIO_clearDio(HEATING_UNIT_ID); // ensure red LED is not on.
 	}
 
 	/* IM NOT SURE IF THIS IS NEEDED HERE OR IN THE INTERRUPT_FN
@@ -342,7 +89,7 @@ void interrupt_fn()
 	TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
 
 	
-	if (!get_system_state(&ss)) // if the system is in sleep mode, we can exit.
+	if (!get_system_state(&ss)) // if the system is in sleep mode, exit.
 	{
 		return;
 	}
@@ -350,10 +97,10 @@ void interrupt_fn()
 	if (should_heat)
 	{
 		on_sub_period(1); // one indicates heating
-		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);
+		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);  // 600ms
 
 		off_sub_period(1); // one indicates heating
-		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF);
+		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF); // 400ms
 
 		if (get_goal_temp(&ss) == get_current_temp(&ss))
 		{
@@ -367,9 +114,8 @@ void interrupt_fn()
 			set_cooling_to_off(&ss);
 			set_heating_to_off(&ss);
 
-			// enter sleep mode
+			// enters sleep mode
 			
-
 		}
 	
 	}
@@ -393,8 +139,8 @@ void interrupt_fn()
 			// the temperatures are equal, thus we are nethier cooling or heating.
 			set_cooling_to_off(&ss);
 			set_heating_to_off(&ss);
-			
-			// enter sleep mode
+
+			// enters sleep mode
 			
 		}
 
