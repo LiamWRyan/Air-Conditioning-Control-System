@@ -1,4 +1,4 @@
-# Air-Conditioning-Control-System
+# Air-Conditioning-Control-System (Febuary 2023)
 
 ## Objectives
 
@@ -19,7 +19,7 @@ and lower power applications.
 
 The red and green LEDs are simulating the heating and cooling units resepctively.
 
-In this system, the user chooses a temperature value (Tchoosen) amd sends it to the CC1350 
+In this system, the user chooses a temperature value (Tchoosen) and sends it to the CC1350 
 microcontroller. The microcontroller should then turn on the *heating unit* (red LED) or the 
 cooling unit (Green led) periodically until the chosen temperature is reached. 
 

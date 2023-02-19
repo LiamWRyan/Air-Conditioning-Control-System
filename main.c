@@ -38,14 +38,7 @@ void off_sub_period(int heating)
 		UARTCharPut(UART0_BASE, (uint8_t) ch);
 	}
 
-	/* IM NOT SURE IF THIS IS NEEDED HERE OR IN THE INTERRUPT_FN
-	TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF);
-	TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
-	// Enable the interrupt
-	TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-	// Enable the timer
-	TimerEnable(GPT0_BASE,TIMER_A);	
-	*/
+	
 
 }
 
@@ -65,14 +58,35 @@ void on_sub_period(int heating)
 		GPIO_clearDio(HEATING_UNIT_ID); // ensure red LED is not on.
 	}
 
-	/* IM NOT SURE IF THIS IS NEEDED HERE OR IN THE INTERRUPT_FN
-	TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);
-	TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+}
+
+void enter_active_mode()
+{
+	// set the system state to sleep
+	set_system_state_active(&ss);
+
+	// set the timer to start right away
+	TimerLoadSet(GPT0_BASE, TIMER_A, 0);
+	// Be sure the interrupt is clear to start
+	TimerIntClear(GPT0_BASE,TIMER_TIMA_TIMEOUT);
+	// Assign the interrupt handler
+	TimerIntRegister(GPT0_BASE, TIMER_A, interrupt_fn);
 	// Enable the interrupt
 	TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-	// Enable the timer
-	TimerEnable(GPT0_BASE,TIMER_A);	
-	*/
+}
+
+void enter_sleep_mode()
+{
+
+	// set the system state to sleep
+	set_system_state_sleep(&ss);
+
+	// set the heating and cooling states to off
+	set_cooling_to_off(&ss);
+	set_heating_to_off(&ss);
+
+	// disable the timer interrupt.
+	TimerIntDisable(GPT0_BASE, TIMER_TIMA_TIMEOUT);
 
 }
 
@@ -96,84 +110,52 @@ void interrupt_fn()
 
 	if (should_heat)
 	{
-		// USES UART to putchar 'H' to user, and turns on the red LED
+		// USE UART to send data ('H') to user, and turns on the red LED
 		on_sub_period(1); // one indicates heating
 		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);  // 600ms
 		
-
-		// ***** THIS SECTION HERE IS WHAT MY QUESTION IS REGARDING *****
-		// Before the next subperiod, can I just call timerloadset again following the function "off_sub_period", or
-		// am i required to call one of the three fuctions below or some combination of them first?
-		/*
-		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
-		
+		// enable the timer and interrupt
 		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
-		
 		TimerEnable(GPT0_BASE,TIMER_A);
-		*/
+
 		off_sub_period(1); // one indicates heating
 		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF); // 400ms
 
 		if (get_goal_temp(&ss) == get_current_temp(&ss))
 		{
-			
-			// Temps are equal, update system state to indicate heating is not needed.
-			set_heating_to_off(&ss);
-
-			// set system state to sleep mode
-			set_system_state_sleep(&ss);
-			// the temperatures are equal, thus we are nethier cooling or heating.
-			set_cooling_to_off(&ss);
-			set_heating_to_off(&ss);
-
-			// enters sleep mode
-			
+			// will disable the timer, set the cooling and heating status to 0 (off), and
+			// set the system state to sleep.
+			enter_sleep_mode();
+			return;
 		}
 	
 	}
 	else // assume if heating is not needed, that cooling is needed.
 	{
-
+		// USE UART to send data ('C') to user, and turns on the red LED
 		on_sub_period(0); // zero indicates cooling
 		TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_ON);
 
-		// Enable the interrupt
-		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); // NOT sure if needed?
-		// Enable the timer
+		// enable the timer and interrupt
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
 		TimerEnable(GPT0_BASE,TIMER_A);
 
 
 		off_sub_period(0); // zero indicates cooling
 		TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_OFF);
 
+		// enable the timer and interrupt
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
+		TimerEnable(GPT0_BASE,TIMER_A);
+
 		if (get_goal_temp(&ss) == get_current_temp(&ss))
-		{
-			
-			// Temps are equal, update system state to indicate heating is not needed.
-			set_heating_to_off(&ss);
-
-			// set system state to sleep mode
-			set_system_state_sleep(&ss);
-			// the temperatures are equal, thus we are nethier cooling or heating.
-			set_cooling_to_off(&ss);
-			set_heating_to_off(&ss);
-
-			// enters sleep mode
-			
+		{	
+			enter_sleep_mode();	
+			return;
 		}
 
 	}
 
-
-	// set the timer again
-	//TimerLoadSet(GPT0_BASE, TIMER_A, 0xE4E1C0);  
-
-	// clear the interrupt
-	//TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
-	// Enable the interrupt
-	TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-	// Enable the timer
-	TimerEnable(GPT0_BASE,TIMER_A);
 
 }
 
@@ -207,88 +189,85 @@ void UART_Interrupt_Handler()
     	// the buffer contains 4 chars, we can check for a command
     	if (get_count(&b) == 4)
     	{
-        	if (is_valid_cmd(&b)) // will return 0 for invalid cmd, and 1 for valid cmd
-        	{
-
-				int cmd = interpret_cmd(&b);
-            	// INTERPRET THE CMD, if -1 then SLEEP COMMAND ISSUED
-            	if (cmd == -1) // returns -1 for sleep mode, otherwise the desired positive temp.
-            	{
-                	// CHECK THE SYSTEM STATE, the system state will be 1 if it is active
-                	if (get_system_state(&ss))
-                	{
-                    	
-						// wait till the end of the current heating or cooling period...
-						// need a way to determine when this period is over and to stop  (IMPLEMET A CHECK FOR THIS)
-
-                    	// put system in sleep mode
-
-
-                    	// update system state to sleep
-						set_system_state_sleep(&ss);
-
-                	}
-                	else
-                	{
-                    	// system is already sleeping, do nothing
-                	}
-
-
-            	}
-            	// TEMPERAUTE COMMAND ISSUED
-            	else
-            	{
-
-					// if the system is already active, we know its heating or cooling, we will need to wait till the end of 
-					// heating / cooling period before updating the goal temperature.
-					if (get_system_state(&ss)) // if get_system_state() returns 1, the system is currently heating or cooling.
-					{
-						// wait for it to finish current heating or cooling period (IMPLEMET A CHECK FOR THIS)
-
-						// Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
-						set_goal_temp(&ss, cmd);
-
-					}
-					else // the system is in sleep mode, we should set it to active mode.
-					{
-						set_system_state_active(&ss); // set the system state to active mode.
-					}
-
-
-					// if the current temp is equal to the goal temp, then we can enter sleep mode.
-                	if (get_current_temp(&ss) == get_goal_temp(&ss))
-                	{
-                    	
-						// Update the system state to sleep mode.
-						set_system_state_sleep(&ss);
-
-						// PUT SYSTEM IN SLEEP MODE
-
-                    	return;
-                	}
-                	else if (get_current_temp(&ss) > get_goal_temp(&ss)) 
-                	{
-                    	// set system state to cooling
-						set_cooling_to_on(&ss);
-
-                	}
-					else //if (get_current_temp(&ss) < get_goal_temp(&ss))
-					{
-						// set system state to heating
-						set_heating_to_on(&ss);
-
-					}
-            	}
-        	}
-        	else
-        	{
-            	// flush the buffer
-            	null_buffer(&b);
-        	}
+        	break;
     	}
 
-
 	}
+
+	if (is_valid_cmd(&b)) // will return 0 for invalid cmd, and 1 for valid cmd
+	{
+
+		int cmd = interpret_cmd(&b);
+		// INTERPRET THE CMD, if -1 then SLEEP COMMAND ISSUED
+		if (cmd == -1) // returns -1 for sleep mode, otherwise the desired positive temp.
+		{
+			// CHECK THE SYSTEM STATE, the system state will be 1 if it is active
+			if (get_system_state(&ss))
+			{
+				
+				// wait till the end of the current heating or cooling period...
+				// check the status of the LEDs, when one is on, we know we aren't at the end of the heating or cooling
+				// period.
+
+				// system will enter sleep mode...
+				enter_sleep_mode();
+
+			}
+			else
+			{
+				// system is already sleeping, do nothing
+				return;
+			}
+
+
+		}
+		// TEMPERAUTE COMMAND ISSUED
+		else
+		{
+
+			// if the system is already active, we know its heating or cooling, we will need to wait till the end of 
+			// heating / cooling period before updating the goal temperature.
+			if (get_system_state(&ss)) // if get_system_state() returns 1, the system is currently heating or cooling.
+			{
+				// wait for it to finish current heating or cooling period (IMPLEMET A CHECK FOR THIS)
+
+				// Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
+				set_goal_temp(&ss, cmd);
+
+			}
+			else // the system is in sleep mode, we should set it to active mode.
+			{
+				// will set the system state to 1 for active mode, and it will enable the timer interrupt
+				enter_active_mode(); 
+			}
+
+
+			// if the current temp is equal to the goal temp, then we can enter sleep mode.
+			if (get_current_temp(&ss) == get_goal_temp(&ss))
+			{
+				enter_sleep_mode();
+				return;
+			}
+			else if (get_current_temp(&ss) > get_goal_temp(&ss)) 
+			{
+				// set system state to cooling
+				set_cooling_to_on(&ss);
+
+			}
+			else //if (get_current_temp(&ss) < get_goal_temp(&ss))
+			{
+				// set system state to heating
+				set_heating_to_on(&ss);
+
+			}
+		}
+	}
+	else
+	{
+		// flush the buffer
+		null_buffer(&b);
+	}
+
 }
 
 

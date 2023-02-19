@@ -1,10 +1,22 @@
+/*  Program: systemstate.h
+ *
+ *  Purpose: Defines the SystemState strucutre and its attributes. Additionally, establishes
+ *           the interface for the functions which perform actions on this strucutre found in
+ *           systemstate.c.
+ * 
+ *  Author: Liam Ryan
+ */
+
+
+/*INCLUDES & DEFINES*/
 #include <stdlib.h>
 #define T_INITIAL 0
+/*INCLUDES & DEFINES END*/
 
 /* When this struct is initialized its state will be 0 for sleep.
- *
- *
- * 
+ * heating will be set to 0 for not heating
+ * cooling will be set to 0 for not cooling
+ * t_curr and t_goal will be set to T_INITIAL (0)
  */
 struct SystemState
 {
@@ -15,6 +27,7 @@ struct SystemState
     int t_goal;     // the goal temp, initially zero
 };
 
+/* INTERFACES */
 int get_goal_temp(struct SystemState *ss);
 
 void set_goal_temp(struct SystemState *ss, int new_temp);
