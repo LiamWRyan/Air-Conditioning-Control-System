@@ -96,9 +96,21 @@ void interrupt_fn()
 
 	if (should_heat)
 	{
+		// USES UART to putchar 'H' to user, and turns on the red LED
 		on_sub_period(1); // one indicates heating
 		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);  // 600ms
+		
 
+		// ***** THIS SECTION HERE IS WHAT MY QUESTION IS REGARDING *****
+		// Before the next subperiod, can I just call timerloadset again following the function "off_sub_period", or
+		// am i required to call one of the three fuctions below or some combination of them first?
+		/*
+		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+		
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
+		
+		TimerEnable(GPT0_BASE,TIMER_A);
+		*/
 		off_sub_period(1); // one indicates heating
 		TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF); // 400ms
 
@@ -124,6 +136,12 @@ void interrupt_fn()
 
 		on_sub_period(0); // zero indicates cooling
 		TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_ON);
+
+		// Enable the interrupt
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); // NOT sure if needed?
+		// Enable the timer
+		TimerEnable(GPT0_BASE,TIMER_A);
+
 
 		off_sub_period(0); // zero indicates cooling
 		TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_OFF);
@@ -151,7 +169,7 @@ void interrupt_fn()
 	//TimerLoadSet(GPT0_BASE, TIMER_A, 0xE4E1C0);  
 
 	// clear the interrupt
-	TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+	//TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
 	// Enable the interrupt
 	TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
 	// Enable the timer
