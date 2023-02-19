@@ -65,14 +65,8 @@ void enter_active_mode()
 	// set the system state to sleep
 	set_system_state_active(&ss);
 
-	// set the timer to start right away
-	TimerLoadSet(GPT0_BASE, TIMER_A, 0);
-	// Be sure the interrupt is clear to start
-	TimerIntClear(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-	// Assign the interrupt handler
-	TimerIntRegister(GPT0_BASE, TIMER_A, interrupt_fn);
-	// Enable the interrupt
-	TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
+	setup_timer_with_interrupt();
+
 }
 
 void enter_sleep_mode()
@@ -85,8 +79,8 @@ void enter_sleep_mode()
 	set_cooling_to_off(&ss);
 	set_heating_to_off(&ss);
 
-	// disable the timer interrupt.
-	TimerIntDisable(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+	// disable the timer
+	TimerDisable(GPT0_BASE, TIMER_A);
 
 }
 
@@ -94,7 +88,7 @@ void enter_sleep_mode()
  *
  * Parameters: void
  *
- * Purpose: 
+ * Purpose: This function is utilized by the timer interrupt handler
  *
  * Return: void
  */
@@ -164,8 +158,7 @@ void interrupt_fn()
  *
  * Parameters: void
  *
- * Purpose:
- *
+ * Purpose: This function configures UART and the UART interrupt for 8-N-1, and a buad of 115200
  *
  * Return: void
  */
@@ -208,6 +201,8 @@ void UART_Interrupt_Handler()
 				// wait till the end of the current heating or cooling period...
 				// check the status of the LEDs, when one is on, we know we aren't at the end of the heating or cooling
 				// period.
+				while ((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6)) == GPIO_DOUT7_4_DIO6 || (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) == GPIO_DOUT7_4_DIO7);
+				
 
 				// system will enter sleep mode...
 				enter_sleep_mode();
@@ -229,7 +224,8 @@ void UART_Interrupt_Handler()
 			// heating / cooling period before updating the goal temperature.
 			if (get_system_state(&ss)) // if get_system_state() returns 1, the system is currently heating or cooling.
 			{
-				// wait for it to finish current heating or cooling period (IMPLEMET A CHECK FOR THIS)
+				// wait for it to finish current heating or cooling period 
+				while ((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6)) == GPIO_DOUT7_4_DIO6 || (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) == GPIO_DOUT7_4_DIO7);
 
 				// Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
 				set_goal_temp(&ss, cmd);
@@ -277,12 +273,13 @@ void UART_Interrupt_Handler()
  *
  * Purpose: Configure the timer and enable timer interrupts. In this function we enable the timer peripheral in both run and 
  *			sleep mode, following this we divide the CPUClock input to the timer by 16 (48*10^6) / 16 = 3*10^6 = 3MHz = 
- *			3000000 = 0x00002DC6C. This function uses timer A and B which will use 32 bits. 
+ *			3000000 = 0x00002DC6C. This function uses timer A and B which will use 32 bits. The timer is setup for oneshot mode.
  *
  * Return: void
  */
 void setup_timer_with_interrupt()
 {
+
 	// enable peripheral power domain
 	PRCMPowerDomainOn(PRCM_DOMAIN_PERIPH);
 	while(PRCMPowerDomainStatus(PRCM_DOMAIN_PERIPH) != PRCM_DOMAIN_POWER_ON);

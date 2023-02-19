@@ -5,6 +5,9 @@
 #include "userbuffer.h"
 
 /*
+#include "inc/hw_memmap.h"
+#include "inc/hw_wdt.h"
+#include "inc/hw_gpio.h"
 #include "driverlib/uart.h"
 #include "driverlib/ioc.h"
 #include "driverlib/prcm.h"
