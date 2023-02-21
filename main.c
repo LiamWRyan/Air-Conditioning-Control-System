@@ -10,11 +10,10 @@ struct Buffer   	b; // globally defined struct, a buffer of user input.
 void off_sub_period(int heating)
 {
 
-	
 	if (heating)
 	{
 		// might complain about implicit dec
-		update_current_temp(&ss, rand()%1, heating);
+		update_current_temp(&ss, rand()%RAND_MAX, heating);
 		//GPIO_clearDio(COOLING_UNIT_ID); 			// in case it is on, turn it off
 		GPIO_clearDio(HEATING_UNIT_ID);
 
@@ -38,8 +37,6 @@ void off_sub_period(int heating)
 		UARTCharPut(UART0_BASE, (uint8_t) ch);
 	}
 
-	
-
 }
 
 void on_sub_period(int heating)
@@ -51,7 +48,7 @@ void on_sub_period(int heating)
 		GPIO_setDio(HEATING_UNIT_ID); 	// red LED
 		GPIO_clearDio(COOLING_UNIT_ID); // ensure green LED it is not on
 	}
-	else // if you are not heating, you are cooling
+	else // if not heating, assume cooling
 	{
 		UARTCharPut(UART0_BASE, (uint8_t) 'C');
 		GPIO_setDio(COOLING_UNIT_ID); 	// green LED
@@ -66,7 +63,7 @@ void enter_active_mode()
 	set_system_state_active(&ss);
 
 	setup_timer_with_interrupt();
-
+	
 }
 
 void enter_sleep_mode()
@@ -81,6 +78,8 @@ void enter_sleep_mode()
 
 	// disable the timer
 	TimerDisable(GPT0_BASE, TIMER_A);
+	GPIO_clearDio(COOLING_UNIT_ID); // ensure green LED it is not on
+	GPIO_clearDio(HEATING_UNIT_ID); // ensure red LED is not on.
 
 }
 
@@ -122,6 +121,10 @@ void interrupt_fn()
 			enter_sleep_mode();
 			return;
 		}
+
+		// enable the timer and interrupt
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
+		TimerEnable(GPT0_BASE,TIMER_A);
 	
 	}
 	else // assume if heating is not needed, that cooling is needed.
@@ -134,19 +137,19 @@ void interrupt_fn()
 		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
 		TimerEnable(GPT0_BASE,TIMER_A);
 
-
 		off_sub_period(0); // zero indicates cooling
 		TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_OFF);
 
-		// enable the timer and interrupt
-		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
-		TimerEnable(GPT0_BASE,TIMER_A);
 
 		if (get_goal_temp(&ss) == get_current_temp(&ss))
 		{	
 			enter_sleep_mode();	
 			return;
 		}
+
+		// enable the timer and interrupt
+		TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT); 
+		TimerEnable(GPT0_BASE,TIMER_A);
 
 	}
 
@@ -210,8 +213,7 @@ void UART_Interrupt_Handler()
 			}
 			else
 			{
-				// system is already sleeping, do nothing
-				return;
+				return; // system is already sleeping, do nothing
 			}
 
 
@@ -221,10 +223,10 @@ void UART_Interrupt_Handler()
 		{
 
 			// if the system is already active, we know its heating or cooling, we will need to wait till the end of 
-			// heating / cooling period before updating the goal temperature.
+			// the current heating / cooling period before updating the goal temperature.
 			if (get_system_state(&ss)) // if get_system_state() returns 1, the system is currently heating or cooling.
 			{
-				// wait for it to finish current heating or cooling period 
+				// wait for it to finish current heating or cooling period before setting new temp.
 				while ((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6)) == GPIO_DOUT7_4_DIO6 || (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) == GPIO_DOUT7_4_DIO7);
 
 				// Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
@@ -233,8 +235,9 @@ void UART_Interrupt_Handler()
 			}
 			else // the system is in sleep mode, we should set it to active mode.
 			{
-				// will set the system state to 1 for active mode, and it will enable the timer interrupt
-				enter_active_mode(); 
+				// will set the system state to 1 for active mode, and enable the timer interrupt
+				enter_active_mode();
+				set_goal_temp(&ss, cmd); 
 			}
 
 
@@ -272,7 +275,7 @@ void UART_Interrupt_Handler()
  * Parameters: void
  *
  * Purpose: Configure the timer and enable timer interrupts. In this function we enable the timer peripheral in both run and 
- *			sleep mode, following this we divide the CPUClock input to the timer by 16 (48*10^6) / 16 = 3*10^6 = 3MHz = 
+ *			sleep mode, following this we divide the CPU Clock input to the timer by 16 (48*10^6) / 16 = 3*10^6 = 3MHz = 
  *			3000000 = 0x00002DC6C. This function uses timer A and B which will use 32 bits. The timer is setup for oneshot mode.
  *
  * Return: void
@@ -321,15 +324,16 @@ void setup_timer_with_interrupt()
  *
  * Parameters: void
  *
- * Purpose: configure the UART for baud 115200 and 8-N-1, with an interrupt.
+ * Purpose: configure the UART for baud 115200 (BAUD_RATE) and 8-N-1, with an interrupt.
  *
  * Return: void
  */
 void setup_UART_Interrupt()
 {
-	// 1. Step 1 in page 1460
+	// pg. 1460
 	PRCMPowerDomainOn(PRCM_DOMAIN_SERIAL);
 	while(PRCMPowerDomainStatus(PRCM_DOMAIN_SERIAL) != PRCM_DOMAIN_POWER_ON);
+
 	//
 	PRCMPeripheralRunEnable(PRCM_PERIPH_UART0);
 	PRCMPeripheralSleepEnable(PRCM_PERIPH_UART0);
@@ -342,13 +346,14 @@ void setup_UART_Interrupt()
 	// Disable UART
 	UARTDisable(UART0_BASE);
 
-	//UART Configuration
+	// UART Configuration
 	UARTConfigSetExpClk(UART0_BASE,CLOCK,BAUD_RATE, UART_CONFIG_WLEN_8|UART_CONFIG_STOP_ONE|UART_CONFIG_PAR_NONE);
-	//
+
+	// Disable flow control
 	UARTHwFlowControlDisable(UART0_BASE);
 
 	// Set FIFO Thresholds
-	UARTFIFOLevelSet(UART0_BASE, UART_FIFO_TX1_8, UART_FIFO_RX1_8); // might need to edit
+	UARTFIFOLevelSet(UART0_BASE, UART_FIFO_TX1_8, UART_FIFO_RX1_8); 
 
 	// UART interrupt handler assignment
 	UARTIntRegister(UART0_BASE, UART_Interrupt_Handler);
@@ -392,9 +397,9 @@ int main()
 	setup_UART_Interrupt();
 	setup_timer_with_interrupt();
 	setup_GPIO_LEDs();
-
-	// sleep mode
 	PRCMSleep();
+
+	enter_sleep_mode();
 
 	return 0;
 }

@@ -68,11 +68,11 @@ int interpret_cmd(struct Buffer *b)
 	}
 	else
 	{
-        // grabe first and second digit
+        // grab the first and second digit
     	int first_digit_ascii  =  b->buffer[0];
     	int second_digit_ascii =  b->buffer[1];
 
-        // convert to appropriate integer value by subtracting ascii 0 (48)
+        // convert char to appropriate integer value by subtracting ascii 0 (48)
     	int first_digit_adjusted_to_int  = first_digit_ascii-48;
     	int second_digit_adjusted_to_int = second_digit_ascii-48;
 
@@ -80,7 +80,6 @@ int interpret_cmd(struct Buffer *b)
     	int temp = first_digit_adjusted_to_int*10;
     	// add second digit to 1s
     	int temperature_value = temp + second_digit_adjusted_to_int;
-
 
     	return temperature_value;
 	}
