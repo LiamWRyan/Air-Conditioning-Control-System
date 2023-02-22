@@ -1,11 +1,14 @@
 /*  Program: userbuffer.h
  *
  *  Purpose: Defines the Buffer strucutre that will contain the user provided commands,
- *           Aditionally, establishes the interface for the functions which perform actions 
+ *           Aditionally, establishes the interface for the functions which perform actions
  *           on this strucutre found in userbuffer.c.
- * 
+ *
  *  Author: Liam Ryan
  */
+
+#ifndef USERBUFFER_H_
+#define USERBUFFER_H_
 
 /*INCLUDES & DEFINES*/
 #include <stdlib.h>
@@ -17,9 +20,9 @@
  * the count will be 0
  */
 struct Buffer {
-	char buffer[BUFFER_SIZE]; // buffer
-	int index;                // current index
-	int count;                // keeping track of total elements 
+    char buffer[BUFFER_SIZE]; // buffer
+    int index;                // current index
+    int count;                // keeping track of total elements
 };
 
 /* INTERFACES */
@@ -36,3 +39,5 @@ int is_valid_cmd(struct Buffer *b);
 void insert(struct Buffer *b, char data);
 
 void init_b(struct Buffer *b);
+
+#endif /* TEST_H_ */
