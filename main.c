@@ -70,14 +70,20 @@ void interrupt_fn(){
     if (should_heat(&ss)){
         // USE UART to send data ('H') to user, and turns on the red LED
         on_sub_period(1); // one indicates heating
-        TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);  // 600ms
 
+		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+        TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_ON);  // 600ms
         // enable the timer and interrupt
         TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
         TimerEnable(GPT0_BASE,TIMER_A);
 
         off_sub_period(1); // one indicates heating
+
+		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
         TimerLoadSet(GPT0_BASE, TIMER_A, HEATING_SUB_OFF); // 400ms
+		// enable the timer and interrupt
+        TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
+        TimerEnable(GPT0_BASE,TIMER_A);
 
         if (get_goal_temp(&ss) == get_current_temp(&ss)){
             // will disable the timer, set the cooling and heating status to 0 (off), and
@@ -86,35 +92,30 @@ void interrupt_fn(){
             return;
         }
 
-        // enable the timer and interrupt
-        TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-        TimerEnable(GPT0_BASE,TIMER_A);
-
     }
     else {
         // USE UART to send data ('C') to user, and turns on the red LED
         on_sub_period(0); // zero indicates cooling
-        TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_ON);
 
+		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
+        TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_ON);
         // enable the timer and interrupt
         TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
         TimerEnable(GPT0_BASE,TIMER_A);
 
         off_sub_period(0); // zero indicates cooling
+		TimerIntClear(GPT0_BASE, TIMER_TIMA_TIMEOUT);
         TimerLoadSet(GPT0_BASE, TIMER_A, COOLING_SUB_OFF);
-
+		// enable the timer and interrupt
+        TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
+        TimerEnable(GPT0_BASE,TIMER_A);
 
         if (get_goal_temp(&ss) == get_current_temp(&ss)){
             enter_sleep_mode(&ss);
             return;
         }
 
-        // enable the timer and interrupt
-        TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
-        TimerEnable(GPT0_BASE,TIMER_A);
-
     }
-
 
 }
 
@@ -123,14 +124,14 @@ void interrupt_fn(){
  *
  * Parameters: void
  *
- * Purpose: This function configures UART and the UART interrupt for 8-N-1, and a buad of 115200
+ * Purpose: This function is the ISR for UART. It receives and handles user input. It will validate 
+ * 			the commands sent to it by the user. 
  *
  * Return: void
  */
 void UART_Interrupt_Handler(){
     // if the interrupt status isn't receive intereupt, return
     if(UARTIntStatus(UART0_BASE,  true) !=  UART_INT_RX) return;
-
 
     UARTIntClear(UART0_BASE,UART_INT_RX|UART_INT_TX);
 
@@ -143,98 +144,105 @@ void UART_Interrupt_Handler(){
 
         insert(&b, (char) ch);
 
-        /*
         // the buffer contains 4 chars, we can check for a command
         if (get_count(&b) == 4){
            break;
         }
-        */
-
+        
     }
 
-    if (get_count(&b) == 4){
+	// Without this check, the program will go to the next check each time no chars are
+	// are avaiable, and it wouldn't have a valid cmd yet, so it would flush the buffer prematurely.
+	if (get_count(&b) < 4){
+		return;
+	}
 
-        if (is_valid_cmd(&b)) { // will return 0 for invalid cmd, and 1 for valid cmd
+	if (is_valid_cmd(&b)) { // will return 0 for invalid cmd, and 1 for valid cmd
 
-           int cmd = interpret_cmd(&b);
-           // INTERPRET THE CMD, if -1 then SLEEP COMMAND ISSUED
-           if (cmd == -1) {
-               // CHECK THE SYSTEM STATE, the system state will be 1 if it is active
-               if (get_system_state(&ss)){
+		// I believe another issue may be that, I am only flushing the buffer when it is 
+		// an invalid command, I should flush it after I have interpreted the cmd again.
+		int cmd = interpret_cmd(&b);
 
-                   // wait till the end of the current heating or cooling period...
-                   // check the status of the LEDs, when one is on, we know we aren't at the end of the heating or cooling
-                   // period.
-                   /*
-                   while (1){
-                       UARTCharPut(UART0_BASE, (uint8_t) '1');
-                       if (((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6 != GPIO_DOUT7_4_DIO6) && (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) != GPIO_DOUT7_4_DIO7)){
-                           break;
-                       }
+		// clear the buffer once we have interpreted the command and returned it.
+		null_buffer(&b);
 
-                   }
-                   */
-                   // system will enter sleep mode...
-                   enter_sleep_mode(&ss);
+		// INTERPRET THE CMD, if -1 then SLEEP COMMAND ISSUED
+		if (cmd == -1) {
+			// CHECK THE SYSTEM STATE, the system state will be 1 if it is active
+			if (get_system_state(&ss)){
 
-               }
-               /*
-               else {
-                   return; // system is already sleeping, do nothing
-               }
-               */
+				// wait till the end of the current heating or cooling period...
+				// check the status of the LEDs, when one is on, we know we aren't at the end of the heating or cooling
+				// period.
+				/*
+				while (1){
+					UARTCharPut(UART0_BASE, (uint8_t) '1');
+					if (((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6 == GPIO_DOUT7_4_DIO6) && (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) == GPIO_DOUT7_4_DIO7)){
+						break;
+					}
+
+				}
+				*/
+				// system will enter sleep mode...
+				enter_sleep_mode(&ss);
+				return;
+
+			}
+			else {
+				return; // system is already sleeping, do nothing
+			}
+			
+		}
+		// TEMPERAUTE COMMAND ISSUED
+		else {
+
+			// if the system is already active, we know its heating or cooling, we will need to wait till the end of
+			// the current heating / cooling period before updating the goal temperature.
+			if (get_system_state(&ss)){ // if get_system_state() returns 1, the system is currently heating or cooling.
+				// wait for it to finish current heating or cooling period before setting new temp.
+				/*
+				while (1){
+					UARTCharPut(UART0_BASE, (uint8_t) '2');
+					if (((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6 == GPIO_DOUT7_4_DIO6) && (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) == GPIO_DOUT7_4_DIO7)){
+						break;
+					}
+
+				}
+				*/
+				// Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
+				set_goal_temp(&ss, cmd);
+
+			}
+			else { // the system is in sleep mode, we should set it to active mode.
+				set_goal_temp(&ss, cmd);
+				
+			}
 
 
-           }
-           // TEMPERAUTE COMMAND ISSUED
-           else {
+			// if the current temp is equal to the goal temp, then we can enter sleep mode.
+			if (get_current_temp(&ss) == get_goal_temp(&ss)) {
+				enter_sleep_mode(&ss);
+				return;
+			}
+			else if (get_current_temp(&ss) > get_goal_temp(&ss)) {
+				// set system state to cooling
+				set_cooling_to_on(&ss);
 
-               // if the system is already active, we know its heating or cooling, we will need to wait till the end of
-               // the current heating / cooling period before updating the goal temperature.
-               if (get_system_state(&ss)){ // if get_system_state() returns 1, the system is currently heating or cooling.
-                   // wait for it to finish current heating or cooling period before setting new temp.
-                   /*
-                  while (1){
-                      UARTCharPut(UART0_BASE, (uint8_t) '2');
-                      if (((HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO6 != GPIO_DOUT7_4_DIO6) && (HWREG(GPIO_BASE + GPIO_O_DOUT7_4) & GPIO_DOUT7_4_DIO7) != GPIO_DOUT7_4_DIO7)){
-                          break;
-                      }
+			}
+			else { //if (get_current_temp(&ss) < get_goal_temp(&ss))
+				// set system state to heating
+				set_heating_to_on(&ss);
 
-                  }
-                  */
-                   // Update the goal temp, cmd is the return from interpert_cmd (the temp or -1 for sleep)
-                   set_goal_temp(&ss, cmd);
-
-               }
-               else { // the system is in sleep mode, we should set it to active mode.
-                   // will set the system state to 1 for active mode
-                   enter_active_mode(&ss);
-                   set_goal_temp(&ss, cmd);
-               }
-
-
-               // if the current temp is equal to the goal temp, then we can enter sleep mode.
-               if (get_current_temp(&ss) == get_goal_temp(&ss)) {
-                   enter_sleep_mode(&ss);
-                   return;
-               }
-               else if (get_current_temp(&ss) > get_goal_temp(&ss)) {
-                   // set system state to cooling
-                   set_cooling_to_on(&ss);
-
-               }
-               else { //if (get_current_temp(&ss) < get_goal_temp(&ss))
-                   // set system state to heating
-                   set_heating_to_on(&ss);
-
-               }
-           }
-       }
-       else {
-           // flush the buffer
-           null_buffer(&b);
-       }
-   }
+			}
+			// turn on the timer and timer interrupt and set the system to active mode.
+			enter_active_mode(&ss);
+		}
+	}
+	else {
+		// flush the buffer
+		null_buffer(&b);
+	}
+   
 
 }
 
@@ -243,7 +251,7 @@ void UART_Interrupt_Handler(){
  *
  * Parameters: void
  *
- * Purpose: configure the UART for baud 115200 (BAUD_RATE) and 8-N-1, with an interrupt.
+ * Purpose: configure the UART for baud 115200 (BAUD_RATE) and 8-N-1 and UART ISR.
  *
  * Return: void
  */
@@ -338,14 +346,18 @@ void setup_timer_with_interrupt()
     PRCMLoadSet();
     while ( !PRCMLoadGet() );
 
+	// Since we want the system to start in sleep mode, we will disable the timer and the interrupt
+	// in this initial configuration.
+	TimerDisable(GPT0_BASE,TIMER_A);
+	TimerIntDisable(GPT0_BASE,TIMER_A);
+
     // Configure the timer in one shot mode.
     // DOCS; technical refernce manual (pg1200), and TimerConfigure in API driver lib.
     TimerConfigure(GPT0_BASE, TIMER_CFG_ONE_SHOT);
-    // Configures the timer load value.
-    // NOTE: This initally configures the timer in 32 bit mode...
-    TimerLoadSet(GPT0_BASE, TIMER_A, 0x00002DC6C0);
-
-
+	// Assign the interrupt handler
+    TimerIntRegister(GPT0_BASE, TIMER_A, interrupt_fn);
+   
+    /*
     // Be sure the interrupt is clear to start
     TimerIntClear(GPT0_BASE,TIMER_TIMA_TIMEOUT);
     // Assign the interrupt handler
@@ -354,6 +366,7 @@ void setup_timer_with_interrupt()
     TimerIntEnable(GPT0_BASE,TIMER_TIMA_TIMEOUT);
     // Enable the timer
     TimerEnable(GPT0_BASE,TIMER_A);
+	*/
 
 }
 
@@ -361,18 +374,14 @@ void setup_timer_with_interrupt()
 int main()
 {
 
-
     init_ss(&ss);
     init_b(&b);
 
     setup_GPIO_LEDs();
-
+	setup_timer_with_interrupt();
     setup_UART_Interrupt();
 
-    setup_timer_with_interrupt();
-
     enter_sleep_mode(&ss);
-
     PRCMSleep();
 
     return 0;
