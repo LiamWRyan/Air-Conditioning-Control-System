@@ -1,0 +1,13 @@
+DEFECTS REALTING TO THIS SYSTEM...
+
+If you enter a temperature that it has to heat or cool to. Then while it is performing heating
+or cooling periods you attempt to put the system in sleep mode with another command, or enter 
+another temperature. It will put it in sleep mode and update the temperature, but there is a chance
+that the command you enter following the end of this period will get ignored. And you will have to enter
+it again one or two times.
+
+The specificaitons note that we should wait for the end of the current heating or cooling period 
+before entering sleep mode or updating the goal temperature. This is not implemented. 
+
+If you enter a command that is invalid, sometimes, the program will ignore your next input or your
+next two inputs.

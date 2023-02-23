@@ -3,9 +3,12 @@
  *  Purpose: Defines the SystemState strucutre and its attributes. Additionally, establishes
  *           the interface for the functions which perform actions on this strucutre found in
  *           systemstate.c.
- * 
+ *
  *  Author: Liam Ryan
  */
+
+#ifndef SYSTEMSTATE_H_
+#define SYSTEMSTATE_H_
 
 
 /*INCLUDES & DEFINES*/
@@ -58,3 +61,4 @@ char* get_current_and_goal_temps(struct SystemState *ss);
 
 void init_ss(struct SystemState *ss);
 
+#endif /* TEST_H_ */
